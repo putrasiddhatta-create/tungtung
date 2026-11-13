@@ -1,170 +1,82 @@
-import os
-import threading
+%%writefile app.py
+import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
 
+st.set_page_config(
+    page_title="Sleep Insights & Forecast",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# HTML Template with beautiful CSS (Bootstrap) and Javascript for dynamic interactivity
-html_content = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Sleep Insights Portal</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            background-color: #0f172a;
-            color: #f1f5f9;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-        }
-        .form-label {
-            color: #cbd5e1;
-            font-weight: 500;
-        }
-        .btn-custom {
-            background-color: #3b82f6;
-            color: white;
-            border-radius: 8px;
-        }
-        .btn-custom:hover {
-            background-color: #2563eb;
-        }
-    </style>
-</head>
-<body>
-    <div class="container py-5">
-        <div class="text-center mb-5">
-            <h1 class="fw-bold text-primary">🌙 Sleep Insights & Forecast Portal</h1>
-            <p class="text-muted">Enter your personalized demographics and sleep metrics to predict total sleep and analyze habits.</p>
-        </div>
+# Set dark custom visual style override
+st.markdown("""
+<style>
+    .reportview-container {
+        background: #0f172a;
+    }
+    h1 {
+        color: #3b82f6 !important;
+    }
+    h3 {
+        color: #f1f5f9 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-        <div class="row g-4">
-            <!-- Left Side Panel Inputs -->
-            <div class="col-lg-6">
-                <div class="card p-4 shadow-sm">
-                    <h4 class="mb-4 text-warning">🛠️ Lifestyle Inputs</h4>
-                    <form id="predictionForm">
-                        <div class="mb-3">
-                            <label class="form-label">Bedtime Phone Screen Time (Minutes)</label>
-                            <input type="range" class="form-range" id="screenTime" min="0" max="300" value="60" oninput="this.nextElementSibling.value = this.value">
-                            <output class="text-info d-block mt-1">60</output> mins
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Screen Brightness (%)</label>
-                            <input type="range" class="form-range" id="brightness" min="0" max="100" value="50" oninput="this.nextElementSibling.value = this.value">
-                            <output class="text-info d-block mt-1">50</output> %
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Age</label>
-                            <input type="range" class="form-range" id="age" min="10" max="100" value="30" oninput="this.nextElementSibling.value = this.value">
-                            <output class="text-info d-block mt-1">30</output> years old
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Caffeine Post-5pm (mg)</label>
-                            <input type="range" class="form-range" id="caffeine" min="0" max="300" value="50" oninput="this.nextElementSibling.value = this.value">
-                            <output class="text-info d-block mt-1">50</output> mg
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Physical Activity (Minutes)</label>
-                            <input type="range" class="form-range" id="activity" min="0" max="180" value="30" oninput="this.nextElementSibling.value = this.value">
-                            <output class="text-info d-block mt-1">30</output> mins
-                        </div>
-                    </form>
-                </div>
-            </div>
+st.title("🌙 Sleep Insights & Forecast Portal")
+st.write("Adjust your metrics in the side panel to dynamically predict sleep duration and evaluate habit impact weights.")
 
-            <!-- Right Side Dashboard Results -->
-            <div class="col-lg-6">
-                <div class="card p-4 shadow-sm h-100 d-flex flex-column justify-content-between">
-                    <div>
-                        <h4 class="text-success mb-4">📊 AI Prediction Insights</h4>
-                        <div class="mb-4">
-                            <h5>Predicted Total Sleep:</h5>
-                            <h2 class="display-4 fw-bold text-info" id="sleepResult">Calculating...</h2>
-                        </div>
-                        <div class="alert alert-secondary text-dark" role="alert" id="adviceBox">
-                            Adjust the inputs to update the recommendation model.
-                        </div>
-                    </div>
-                    
-                    <div class="mt-4">
-                        <canvas id="impactChart" style="max-height: 200px;"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+@st.cache_resource
+def load_models():
+    lr_model = joblib.load('linear_regression_model.pkl')
+    return lr_model
 
-    <script>
-        let chart;
+try:
+    lr_model = load_models()
+    avg_sleep = 6.27
+except Exception as e:
+    st.error(f"Initialization Error: {e}. Please ensure your model .pkl files are saved in the project directory.")
+    st.stop()
 
-        function initChart() {
-            const ctx = document.getElementById('impactChart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Phone Time', 'Brightness', 'Caffeine', 'Exercise'],
-                    datasets: [{
-                        label: 'Estimated Loss/Gain Hours',
-                        data: [0, 0, 0, 0],
-                        backgroundColor: ['rgba(239, 68, 68, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(34, 197, 94, 0.7)'],
-                        borderColor: ['#ef4444', '#ef4444', '#ef4444', '#22c55e'],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true }
-                    }
-                }
-            });
-        }
+# Side Panel Control Controls
+st.sidebar.header("🛠️ Lifestyle Metrics")
+screentime = st.sidebar.slider("Bedtime Phone Screen Time (Minutes)", 0, 300, 60, step=5)
+brightness = st.sidebar.slider("Screen Brightness (%)", 0, 100, 50, step=5)
+age = st.sidebar.slider("Age (Years)", 10, 100, 30, step=1)
+caffeine = st.sidebar.slider("Caffeine Post-5pm (mg)", 0, 300, 50, step=10)
+activity = st.sidebar.slider("Physical Activity (Minutes)", 0, 180, 30, step=5)
 
-        async function fetchPrediction() {
-            const screenTime = document.getElementById('screenTime').value;
-            const brightness = document.getElementById('brightness').value;
-            const age = document.getElementById('age').value;
-            const caffeine = document.getElementById('caffeine').value;
-            const activity = document.getElementById('activity').value;
+# Dynamic ML inference execution
+input_data = np.array([[screentime, brightness, age, caffeine, activity]])
+predicted_hours = lr_model.predict(input_data)[0]
 
-            const response = await fetch(`/predict?screentime=${screenTime}&brightness=${brightness}&age=${age}&caffeine=${caffeine}&activity=${activity}`);
-            const data = await response.json();
+col1, col2 = st.columns([1, 1])
 
-            document.getElementById('sleepResult').innerText = data.predicted_sleep.toFixed(2) + ' Hours';
-            document.getElementById('adviceBox').innerHTML = `<strong>Habit Advice:</strong> ${data.advice}`;
-            document.getElementById('adviceBox').className = `alert ${data.predicted_sleep < 6 ? 'alert-danger' : 'alert-success'}`;
+with col1:
+    st.subheader("📊 Model Sleep Duration Prediction")
+    st.metric(
+        label="Estimated Total Sleep", 
+        value=f"{predicted_hours:.2f} Hours", 
+        delta=f"{predicted_hours - avg_sleep:.2f} hrs vs Average"
+    )
 
-            // Update chart data
-            chart.data.datasets[0].data = [
-                parseFloat(data.impacts.phone),
-                parseFloat(data.impacts.brightness),
-                parseFloat(data.impacts.caffeine),
-                parseFloat(data.impacts.exercise)
-            ];
-            chart.update();
-        }
+    if predicted_hours < 6.0:
+        st.error("Your predicted sleep is quite low. Try minimizing evening phone minutes and lowering your screen brightness!")
+    elif predicted_hours >= 7.5:
+        st.success("Excellent! This routine yields a healthy and highly restorative sleep schedule.")
+    else:
+        st.warning("Your sleep schedule is acceptable, but you can improve it further by capping screen time and caffeine post-5 PM.")
 
-        // Bind listeners to trigger prediction updates on UI input interaction
-        document.querySelectorAll('.form-range').forEach(input => {
-            input.addEventListener('input', fetchPrediction);
-        });
-
-        window.onload = () => {
-            initChart();
-            fetchPrediction();
-        };
-    </script>
-</body>
-</html>
-"""
-
-
+with col2:
+    st.subheader("📉 Live Sleep Impact Chart")
+    coefs = lr_model.coef_
+    impacts = {
+        'Phone Screen Time': screentime * coefs[0],
+        'Screen Brightness': brightness * coefs[1],
+        'Late Caffeine': caffeine * coefs[3],
+        'Physical Exercise': activity * coefs[4]
+    }
+    chart_df = pd.DataFrame(list(impacts.items()), columns=['Lifestyle Habit', 'Hours Added/Lost'])
+    st.bar_chart(chart_df.set_index('Lifestyle Habit'))
