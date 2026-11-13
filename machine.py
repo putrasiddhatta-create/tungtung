@@ -3,8 +3,6 @@ import threading
 import pandas as pd
 import numpy as np
 
-# Create a Flask app
-app = Flask(__name__)
 
 # HTML Template with beautiful CSS (Bootstrap) and Javascript for dynamic interactivity
 html_content = """
