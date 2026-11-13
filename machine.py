@@ -167,9 +167,7 @@ html_content = """
 </html>
 """
 
-@app.route('/')
-def home():
-    return render_template_string(html_content)
+
 
 @app.route('/predict')
 def predict():
